@@ -7,6 +7,7 @@ import androidx.core.app.ActivityCompat;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
 import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity {
@@ -37,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
                 (TextView) findViewById(R.id.bandwidth),
                 (TextView) findViewById(R.id.pci),
                 (TextView) findViewById(R.id.rsrq),
-                (TextView) findViewById(R.id.snr),
+                (TextView) findViewById(R.id.cqi),
                 (TextView) findViewById(R.id.ipaddress)
         };
         ConnectionInfo clg = new ConnectionInfo(MainActivity.this,this.textViews);
