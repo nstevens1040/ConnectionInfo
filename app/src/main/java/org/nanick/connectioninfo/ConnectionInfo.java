@@ -45,6 +45,8 @@ import java.net.SocketException;
 import java.net.URL;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Dictionary;
 import java.util.Enumeration;
 import java.util.Hashtable;
@@ -64,7 +66,9 @@ public class ConnectionInfo {
     public TextView[] textViews;
     public File csv;
     public FileWriter csv_writer;
-    public ConnectionInfo(Context context, TextView[] results) {
+    public Bands[] bands;
+    public ConnectionInfo(Context context, TextView[] results, Bands[] bands) {
+        this.bands = bands;
         this.csv = new File(context.getApplicationContext().getExternalFilesDir(null), Integer.valueOf((int) (System.currentTimeMillis() / 1000))+".csv");
         this.textViews = results;
         this.context = context;
@@ -75,7 +79,7 @@ public class ConnectionInfo {
         try {
             if (this.csv.createNewFile()) {
                 this.csv_writer = new FileWriter(this.csv);
-                this.csv_writer.write("Mcc,Mnc,Lac,Rat,Channel,Bandwidth,Pci,Rsrp,Rsrq,Snr,CellID,eNodeB,TA,Latitude,Longitude,IPAddress,DownloadSpeed\n");
+                this.csv_writer.write("Mcc,Mnc,Lac,Rat,EARFCN,Bandwidth,Pci,Rsrp,Rsrq,CellID,eNodeB,TA,Latitude,Longitude,IPAddress,Band,Spectrum,DownloadSpeed\n");
                 this.csv_writer.close();
                 Log.i("ConnectionInfo", "File created.");
             } else {
@@ -181,13 +185,19 @@ public class ConnectionInfo {
         }
     }
     public class SpeedTestTask extends AsyncTask<Void, Void, Double> {
-        String testUrl = "https://beserver.nanick.org:7777/uploads/test.bin";
+        String testUrl = "https://beserver.nanick.org:7777/testing.bin";
         byte[] buffer = new byte[32]; //byte[] buffer = new byte[13107200];
         CellInfoObj cio;
         TextView[] textViews;
         public SpeedTestTask(CellInfoObj cellInfoObj, TextView[] tv){
             this.cio = cellInfoObj;
             this.textViews = tv;
+            /*Log.i("ConnectionInfo",this.textViews.length+" textviews");
+            for(int i = 0; i < this.textViews.length; i++){
+                TextView tvn = this.textViews[i];
+                String tvn_name = tvn.getResources().getResourceName(tvn.getId());
+                Log.i("ConnectionInfo","id: "+tvn_name+", index: "+i);
+            }*/
             this.textViews[0].setText(this.cio.Rsrp+" dBm");
             if(this.cio.TA == Integer.MAX_VALUE){
                 this.textViews[2].setText("N/A");
@@ -206,8 +216,9 @@ public class ConnectionInfo {
             this.textViews[12].setText(this.cio.Bandwidth+" Mhz");
             this.textViews[13].setText(this.cio.Pci+"");
             this.textViews[14].setText(this.cio.Rsrq+" dBm");
-            this.textViews[15].setText(this.cio.Cqi+"");
-            this.textViews[16].setText(this.cio.IPAddress);
+            this.textViews[15].setText(this.cio.IPAddress);
+            this.textViews[16].setText(this.cio.Band.band+"");
+            this.textViews[17].setText(this.cio.Band.name);
         }
         @Override
         protected Double doInBackground(Void... params) {
@@ -232,13 +243,14 @@ public class ConnectionInfo {
                 sb.append(this.cio.Pci+",");
                 sb.append(this.cio.Rsrp+",");
                 sb.append(this.cio.Rsrq+",");
-                sb.append(this.cio.Cqi+",");
                 sb.append(this.cio.CellID+",");
                 sb.append(this.cio.eNodeB+",");
                 sb.append(this.cio.TA+",");
                 sb.append(this.cio.Latitude+",");
                 sb.append(this.cio.Longitude+",");
                 sb.append(this.cio.IPAddress+",");
+                sb.append(this.cio.Band.band+",");
+                sb.append(this.cio.Band.name+",");
                 sb.append(new DecimalFormat("0.00").format(mbps)+",\n");
                 String csv_string = sb.toString();
                 Log.i("CellInfo",new DecimalFormat("0.00").format(mbps)+" Mbps download");
@@ -271,7 +283,7 @@ public class ConnectionInfo {
             }
             Double endTime = Double.valueOf(System.currentTimeMillis());
             Double totalSeconds = (endTime - startTime) / 1000;
-            mbps = 20 / totalSeconds;
+            mbps = 100 / totalSeconds;
             inputStream.close();
             return mbps;
         }
@@ -302,6 +314,8 @@ public class ConnectionInfo {
         public double DownloadSpeed;
         public String IPAddress;
         public String Cqi;
+        public Bands Band;
+        public String Spectrum;
     }
     public String parseNetworkType(int networkType){
         switch (networkType) {
@@ -340,54 +354,6 @@ public class ConnectionInfo {
         }
     }
 
-    private class ScanBack extends TelephonyScanManager.NetworkScanCallback {
-        @Override
-        public void onResults(List<CellInfo> cellInfo) {
-            for (CellInfo info : cellInfo) {
-                if (info instanceof CellInfoLte) {
-                    // Handle LTE cell info
-                    CellInfoLte cellInfoLte = (CellInfoLte) info;
-                    CellIdentityLte cellId = (CellIdentityLte)cellInfoLte.getCellIdentity();
-                    CellSignalStrengthLte signalStrengthLte = cellInfoLte.getCellSignalStrength();
-                    StringJoiner sj = new StringJoiner(", ");
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        IntStream.of(cellId.getBands()).forEach(x -> sj.add(String.valueOf(x)));
-                    }
-                    //Log.i("ConnectionInfo", "bands: " + sj.toString());
-                    CellInfoObj cio = new CellInfoObj();
-                    cio.Cqi = sj.toString();
-                    cio.Rat = "Lte";
-                    cio.Lac = cellId.getTac();
-                    cio.Channel = cellId.getEarfcn();
-                    cio.Bandwidth = cellId.getBandwidth() / 1000;
-                    cio.Pci = cellId.getPci();
-                    cio.Rsrp = signalStrengthLte.getRsrp();
-                    cio.Rsrq = signalStrengthLte.getRsrq();
-                    cio.Snr = signalStrengthLte.getRssnr();
-                    cio.CellID = cellId.getCi();
-                    cio.eNodeB = Math.floorDiv(cio.CellID,256);
-                    cio.TA = signalStrengthLte.getTimingAdvance();
-                    cio.IPAddress = getIPAddress();
-                    try {
-                        Log.i("ConnectionInfo",JSONConvector.toJSON(cio));
-                    } catch (JSONException e) {
-                        throw new RuntimeException(e);
-                    } catch (IllegalAccessException e) {
-                        throw new RuntimeException(e);
-                    }
-                    // Access cell info properties as needed
-                }
-            }
-        }
-        @Override
-        public void onComplete() {
-            Log.i("ConnectionInfo","Scan complete");
-        }
-        @Override
-        public void onError(int error) {
-            Log.e("ConnectionInfo","Scan error: "+error);
-        }
-    }
     @SuppressLint({"MissingPermission", "NewApi"})
     private void getCellularDetails() {
         CellInfoObj cio = new CellInfoObj();
@@ -414,6 +380,23 @@ public class ConnectionInfo {
                 cio.Rat = parseNetworkType(telephonyManager.getNetworkType());
                 cio.Lac = cellId.getTac();
                 cio.Channel = cellId.getEarfcn();
+                Boolean found = false;
+                for(int i = 0; i < this.bands.length; i++){
+                    Bands b = this.bands[i];
+                    ArrayList<Double> earfcnlist = b.dLEARFCN;
+                    Collections.sort(earfcnlist);
+                    double n_low = earfcnlist.get(0);
+                    double n_high = earfcnlist.get((earfcnlist.toArray().length - 1));
+                    if(cio.Channel >= n_low & cio.Channel <= n_high){
+                        cio.Band = b;
+                        found = true;
+                    }
+                }
+                if(!found){
+                    Log.i("ConnectionInfo","Could not find band from EARFCN!");
+                } else {
+                    Log.i("ConnectionInfo","Band: "+cio.Band.band+", spectrum: "+cio.Band.name);
+                }
                 cio.Bandwidth = cellId.getBandwidth() / 1000;
                 cio.Pci = cellId.getPci();
                 cio.Rsrp = signalStrengthLte.getRsrp();
